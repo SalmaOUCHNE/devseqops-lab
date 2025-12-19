@@ -1,66 +1,55 @@
-from flask import Flask, request
+from flask import Flask, request, jsonify
 import sqlite3
-import subprocess
-import hashlib
-import os
 
 app = Flask(__name__)
 
-SECRET_KEY = "dev-secret-key-12345"
+DATABASE = "users.db"
 
+# ----------------------------------
+# Connexion à la base de données
+# ----------------------------------
+def get_db_connection():
+    conn = sqlite3.connect(DATABASE)
+    return conn
+
+# ----------------------------------
+# Route LOGIN (SQL sécurisé)
+# ----------------------------------
 @app.route("/login", methods=["POST"])
 def login():
-    username = request.json.get("username")
-    password = request.json.get("password")
+    data = request.get_json()
 
-    conn = sqlite3.connect("users.db")
+    # Validation des entrées
+    if not data or "username" not in data or "password" not in data:
+        return jsonify({"error": "Invalid input"}), 400
+
+    username = data["username"]
+    password = data["password"]
+
+    conn = get_db_connection()
     cursor = conn.cursor()
 
-    query = f"SELECT * FROM users WHERE username='{username}' AND password='{password}'"
-    cursor.execute(query)
+    # ✅ Requête SQL paramétrée (ANTI SQL INJECTION)
+    query = "SELECT * FROM users WHERE username=? AND password=?"
+    cursor.execute(query, (username, password))
 
-    result = cursor.fetchone()
-    if result:
-        return {"status": "success", "user": username}
-    return {"status": "error", "message": "Invalid credentials"}
+    user = cursor.fetchone()
+    conn.close()
 
-@app.route("/ping", methods=["POST"])
-def ping():
-    host = request.json.get("host", "")
-    cmd = f"ping -c 1 {host}"
-    output = subprocess.check_output(cmd, shell=True)
-    return {"output": output.decode()}
+    if user:
+        return jsonify({"status": "success", "user": username})
 
-@app.route("/compute", methods=["POST"])
-def compute():
-    expression = request.json.get("expression", "1+1")
-    result = eval(expression)
-    return {"result": result}
+    return jsonify({"status": "error", "message": "Invalid credentials"}), 401
 
-@app.route("/hash", methods=["POST"])
-def hash_password():
-    pwd = request.json.get("password", "admin")
-    hashed = hashlib.md5(pwd.encode()).hexdigest()
-    return {"md5": hashed}
-
-@app.route("/readfile", methods=["POST"])
-def readfile():
-    filename = request.json.get("filename", "test.txt")
-    with open(filename, "r") as f:
-        content = f.read()
-    return {"content": content}
-
-@app.route("/debug", methods=["GET"])
-def debug():
-    return {
-        "debug": True,
-        "secret_key": SECRET_KEY,
-        "environment": dict(os.environ)
-    }
-
+# ----------------------------------
+# Route HELLO (test)
+# ----------------------------------
 @app.route("/hello", methods=["GET"])
 def hello():
-    return {"message": "Welcome to the DevSecOps vulnerable API"}
+    return jsonify({"message": "DevSecOps API running securely"})
 
+# ----------------------------------
+# Lancement de l'application
+# ----------------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
