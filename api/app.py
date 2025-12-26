@@ -1,5 +1,7 @@
 from flask import Flask, request, jsonify
 import sqlite3
+import bcrypt
+hashed = bcrypt.hashpw(pwd.encode(), bcrypt.gensalt())
 
 app = Flask(__name__)
 
